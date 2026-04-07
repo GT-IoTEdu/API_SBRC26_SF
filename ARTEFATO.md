@@ -186,19 +186,94 @@ cp backend/env_example.txt backend/.env
 Edite `backend/.env` e preencha ao menos:
 
 ```
-DATABASE_URL=mysql+pymysql://IoT_EDU:<senha>@localhost/iot_edu
-PFSENSE_API_KEY=<chave gerada no Passo 6>
-GOOGLE_CLIENT_ID=<seu client_id>
-GOOGLE_CLIENT_SECRET=<seu client_secret>
-SUPERUSER_EMAIL=<seu email>
-SUPERUSER_PASSWORD=<sua senha>
+# ===============================
+# Configurações do banco de dados MySQL
+# ===============================
+
+# Nome do usuário do banco de dados
+MYSQL_USER=
+
+# Senha do usuário do banco de dados
+MYSQL_PASSWORD=
+
+# Endereço do servidor MySQL (localhost para máquina local)
+MYSQL_HOST=localhost
+
+# Nome do banco de dados a ser utilizado
+MYSQL_DB=
+
+
+# ===============================
+# Configurações de email (opcional)
+# ===============================
+
+# Servidor SMTP para envio de emails (ex: Gmail)
+EMAIL_HOST=smtp.gmail.com
+
+# Porta do servidor SMTP (587 geralmente usa TLS)
+EMAIL_PORT=587
+
+# Define se a conexão usará TLS (True ou False)
+EMAIL_USE_TLS=True
+
+# Email remetente utilizado para envio
+EMAIL_HOST_USER=seu_email@gmail.com
+
+# Senha do email ou senha de app (recomendado para Gmail)
+EMAIL_HOST_PASSWORD=sua_senha_email_aqui
+
+
+# ===============================
+# Configurações de autenticação Google (OAuth)
+# ===============================
+
+# ID do cliente fornecido pelo Google Cloud
+GOOGLE_CLIENT_ID=
+
+# Chave secreta do cliente Google
+GOOGLE_CLIENT_SECRET=
+
+
+# ===============================
+# Segurança da aplicação
+# ===============================
+
+# Chave secreta usada para criptografia e sessões (gerar uma segura)
+SECRET_KEY=
+
+# Define se a sessão deve ser estritamente validada (true/false)
+AUTH_STRICT_SESSION=true
+
+
+# ===============================
+# Configuração de faixa de IP
+# ===============================
+
+# IP inicial da faixa permitida
+IP_RANGE_START=192.168.59.1
+
+# IP final da faixa permitida
+IP_RANGE_END=192.168.59.99
+
+# Lista de IPs excluídos da faixa (separados por vírgula)
+IP_RANGE_EXCLUDED=192.168.59.1,192.168.59.2
+
+
+# ===============================
+# Controle de acesso
+# ===============================
+
+# Email do usuário com privilégios de superusuário (login via Google)
+SUPERUSER_ACCESS=seu_email@gmail.com
+AUTH_STRICT_SESSION=false
+IDS_SSE_TLS_VERIFY=false
 ```
 
 ---
 
 ## Configuração
 
-### 5. Configurar o banco de dados MySQL/MariaDB
+### 5. Configurar o banco de dados MySQL
 
 Acesse o MySQL como root e crie o banco e o usuário:
 
@@ -308,18 +383,80 @@ python scripts/setup_initial_aliases_and_rules.py
 
 ## Experimentos
 
-> TODO: Adicionar passo a passo detalhado para execução e obtenção dos resultados do artigo, detalhando cada reivindicação.
 
-### Reivindicação #1 — Tempo médio de contenção de 5,56 s
+### **Reivindicação #1 — Tempo médio de contenção de 5,56 s**
 
-TODO: Descrever os comandos e scripts para reproduzir os 75 testes (5 tipos de ataque × 15 execuções) e como coletar os tempos de contenção.
+Para garantir a reprodutibilidade dos resultados apresentados, descreve-se a seguir o procedimento necessário para execução dos experimentos, incluindo a configuração do ambiente e a realização dos 75 testes (5 tipos de ataque × 15 execuções).
 
-### Reivindicação #2 — Trade-off entre IDSs baseados em assinatura e comportamento
+Inicialmente, é necessário configurar um ambiente virtualizado contendo os componentes da arquitetura IoT-Edu, incluindo o firewall pfSense, os sistemas de detecção de intrusão (IDS) e o módulo de coleta de eventos.
 
-TODO: Descrever como comparar os resultados individuais do Suricata, Snort e Zeek e reproduzir a análise de latência por fase de detecção.
+**Passo 1 — Configuração do firewall**
+Instalar e configurar uma máquina virtual com o pfSense, responsável pela aplicação das regras de bloqueio dinâmico.
+
+**Passo 2 — Configuração dos IDS**
+Instalar e configurar os IDS Suricata, Snort e Zeek em uma máquina virtual dedicada ao monitoramento. Os sistemas devem estar operando em modo de captura e configurados para gerar logs nos seguintes diretórios padrão:
+
+* Suricata: `/var/log/suricata/fast.log`
+* Snort: `/var/log/snort/alert`
+* Zeek: `/home/ubuntu/zeek-logs/notice.log`
+
+**Passo 3 — Execução do servidor de eventos (SSE)**
+O script responsável pela coleta e transmissão dos eventos (`sse_server.py`) deve ser executado no mesmo ambiente dos IDS.
+
+1. Ajustar os caminhos dos arquivos de log no código:
+
+   ```
+   LOG_FILE_SURICATA = "/var/log/suricata/fast.log"
+   LOG_FILE_SNORT = "/var/log/snort/alert"
+   LOG_FILE_ZEEK = "/home/ubuntu/zeek-logs/notice.log"
+   ```
+
+2. Ativar o ambiente virtual:
+
+   ```
+   source venv/bin/activate
+   ```
+
+3. Iniciar o servidor SSE:
+
+   ```
+   uvicorn sse_server:app --host 0.0.0.0 --port 8001
+   ```
+
+**Passo 4 — Execução dos ataques e coleta de métricas**
+Os cenários de ataque utilizados nos experimentos estão disponíveis no repositório:
+
+* eng-ids ataques docker
+
+A documentação detalhada para instalação e execução encontra-se em:
+[https://github.com/MatheusCiocca/eng-ids/blob/main/ataques_docker/DOCKER_USAGE.md](https://github.com/MatheusCiocca/eng-ids/blob/main/ataques_docker/DOCKER_USAGE.md)
+
+Os ataques devem ser executados a partir de uma máquina virtual dedicada ao papel de atacante, contemplando os seguintes cenários:
+
+* HTTP Flood
+* ICMP Flood
+* DNS Tunneling
+* SSH Brute Force
+* SQL Injection
+
 
 ---
 
+Cada ataque deve ser executado **5 vezes para cada tipo de ataque e para cada IDS**, totalizando 75 execuções.
+
+Durante a execução de cada ataque, deve-se iniciar simultaneamente o script de monitoramento responsável pela coleta dos tempos de contenção:
+
+```
+ids-log-monitor/monitor.py
+```
+
+Esse script registra os *timestamps* associados às etapas de início do ataque e de aplicação do bloqueio — momento em que o atacante perde o acesso à rede —, permitindo o cálculo da métrica de tempo de contenção (Início–Falha).
+
+---
+
+
 ## Licença
 
-TODO: Adicionar licença do projeto.
+Copyright (c) 2025 RNP – National Research and Education Network (Brazil)
+
+This code was developed is licensed under the terms of the BSD License. It may be freely used, modified, and distributed, including for commercial purposes, provided that this copyright notice is retained. This software is provided "as is", without any warranty, express or implied, including, but not limited to, warranties of merchantability or fitness for a particular purpose. RNP and the authors shall not be held liable for any damages or losses arising from the use of this software.
